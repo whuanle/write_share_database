@@ -4,13 +4,11 @@
 
 一般来说，数据库分库分表，有以下做法：
 
-* 远程表：实体表不在当前数据库实例上，访问时需要通过远程获取；
-
 * 按哈希分片：根据一条数据的标识计算哈希值，将其分配到特定的数据库引擎中；
 
 * 按范围分片：根据一条数据的标识（一般是值），将其分配到特定的数据库引擎中；
 
-* 按列表分片：
+* 按列表分片：根据某些字段的标识，如果符合条件则分配到特定的数据库引擎中。
 
 
 
@@ -32,7 +30,7 @@ MariaDB 使用 Spider 插件进行分库分表的支持，Spider 存储引擎是
 
 
 
-在这篇文章中，笔者将使用 MariaDB 进行分库分表的实践。
+在这篇文章中，笔者将使用 MariaDB Spider 进行分库分表的实践。
 
 ![image-20220206153925707](images/image-20220206153925707.png)
 
@@ -533,6 +531,10 @@ OPTIONS(
 
 
 
+### 哈希分片
+
+在这一小节中，我们将一个表进行分片，在插入数据时，数据自动分片到三个数据库实例中。
+
 在三个数据节点数据库中，在 test1 数据库下，执行命令，创建表：
 
 ```sql
@@ -572,4 +574,50 @@ CREATE TABLE test1.shardtest
 ```
 
 ![image-20220206191238820](images/image-20220206191238820.png)
+
+
+
+然后打开 https://github.com/whuanle/write_share_database，找到 `分片测试数据.sql` 这个文件，里面有很多模拟数据。
+
+
+
+你可以观察到，三个数据库实例的数据是不同的。
+
+
+
+### 根据值范围分片
+
+分片方式的选择在于 `PARTITION BY` 属性，例如哈希分片是根据一个键进行计算的，则配置命令为 ` PARTITION BY KEY (id) `，如果是根据值范围分片，则是 ` PARTITION BY range columns (<字段名称>)`。
+
+```bash
+) ENGINE=spider COMMENT='wrapper "mysql", table "shardtest"'
+ PARTITION BY range columns (k)
+(
+ PARTITION pt1 values less than (5000) COMMENT = 'srv "mariadbtest1"',
+ PARTITION pt2 values less than (5100) COMMENT = 'srv "mariadbtest2"'
+ PARTITION pt3 values less than (5200) COMMENT = 'srv "mariadbtest3"'
+) ;
+```
+
+
+
+### 根据列表分片
+
+根据列表分片，一般是某个字段，可以将数据划分为不同类型，可以根据这个字段的内容对数据进行分组。
+
+
+
+```sql
+) ENGINE=spider COMMENT='wrapper "mysql", table "shardtest"'
+ PARTITION BY list columns (k)
+(
+ PARTITION pt1 values in ('4900', '4901', '4902') COMMENT = 'srv "mariadbtest1"',
+ PARTITION pt2 values in ('5000', '5100') COMMENT = 'srv "mariadbtest2"'
+ PARTITION pt3 values in ('5200', '5300') COMMENT = 'srv "mariadbtest3"'
+) ;
+```
+
+
+
+当数据的 k 字段，值是 4900 、4901 或 4902 时，将被分片到 mariadbtest1 实例中。
 
